@@ -1,0 +1,13 @@
+/* Yellow color - RTL */
+#block-views-exp-map-list-business-page-1 h2.block-title {
+  border-right: none;
+  border-left: 1px solid #f6dd8e;
+}
+#block-views-exp-map-list-business-page-1 h2.block-title:after {
+  border-color: rgba(249,204,61, 0);
+  border-right-color: #f9cc3d;
+}
+#block-views-exp-map-list-business-page-1 h2.block-title:before {
+  border-color: rgba(246, 221, 142, 0);
+  border-right-color: #f6dd8e;
+}

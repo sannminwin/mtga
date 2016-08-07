@@ -1,0 +1,18 @@
+﻿/* $Id: color-blue-style.css,v 1.0.0 2013/09/25 08:18:15 symphonythemes Exp $ */
+
+/*------------------------------------*\
+	BUSINESS CSS
+\*------------------------------------*/
+/* Business List */
+#block-views-exp-map-list-business-page-1 h2.block-title {
+  border-right: none;
+  border-left: 1px solid #6edbf8;
+}
+#block-views-exp-map-list-business-page-1 h2.block-title:after {
+  border-color: rgba(0, 191, 243, 0);
+  border-right-color: #00bff3;
+}
+#block-views-exp-map-list-business-page-1 h2.block-title:before {
+  border-color: rgba(110, 219, 248, 0);
+  border-right-color: #6edbf8;
+}

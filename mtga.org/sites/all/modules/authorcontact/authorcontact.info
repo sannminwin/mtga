@@ -1,0 +1,4 @@
+name = Author Contact
+description = Creates a block to send an email to node author
+dependencies[] = contact
+core = 7.x

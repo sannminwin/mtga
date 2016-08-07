@@ -1,0 +1,305 @@
+<?php
+
+/**
+ * @file
+ * Author Contact module main file.
+ */
+
+/**
+ * Implements hook_block_info().
+ */
+function authorcontact_block_info() {
+  $blocks[0] = array(
+    'info' => t('Author Contact'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function authorcontact_block_configure($delta = 0) {
+
+  $form['authorcontact_desc'] = array(
+    '#type'          => 'textfield',
+    '#title'         => t('Contact description'),
+    '#description'   => t('This text will show at the top of the Author Contact block, can be used for instructions etc.'),
+    '#default_value' => variable_get('authorcontact_desc', ''),
+  );
+
+  $form['authorcontact_allow_different_name'] = array(
+    '#type'          => 'checkbox',
+    '#title'         => t('Allow authenticated users to use different name and email'),
+    '#default_value' => variable_get('authorcontact_allow_different_name', FALSE),
+  );
+  
+  $form['authorcontact_allow_anonymous'] = array(
+    '#type'          => 'checkbox',
+    '#title'         => t('Allow anonymous users to contact author'),
+    '#default_value' => variable_get('authorcontact_allow_anonymous', TRUE),
+  );
+
+  $form['authorcontact_bcc'] = array(
+    '#type'          => 'textfield',
+    '#title'         => t('BCC address'),
+    '#description'   => t("Enter a comma-separated list of email addresses for all contact submissions to be BCCed to. Usually for site administration purposes. Please don't abuse privacy with this feature. Leave empty for no BCC emails."),
+    '#default_value' => variable_get('authorcontact_bcc', ''),
+  );
+
+  $form['authorcontact_form_width'] = array(
+    '#type'          => 'textfield',
+    '#title'         => t('Form width for name & email fields'),
+    '#default_value' => variable_get('authorcontact_form_width', 15),
+    '#element_validate' => array('element_validate_integer_positive'),
+  );
+
+  $form['authorcontact_form_height'] = array(
+    '#type'          => 'textfield',
+    '#title'         => t('Height in lines for the message textbox'),
+    '#description'   => t('Default is 4'),
+    '#default_value' => variable_get('authorcontact_form_height', 4),
+    '#element_validate' => array('element_validate_integer_positive'),
+  );
+
+  $form['authorcontact_block_display_types'] = array(
+    '#type'          => 'checkboxes',
+    '#title'         => t('Display on nodes of type'),
+    '#options'       => node_type_get_names(),
+    '#default_value' => variable_get('authorcontact_block_display_types', array()),
+  );
+
+  return $form;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function authorcontact_block_save($delta = 0, $edit = array()) {
+  variable_set('authorcontact_desc', $edit['authorcontact_desc']);
+  variable_set('authorcontact_allow_different_name', $edit['authorcontact_allow_different_name']);
+  variable_set('authorcontact_allow_anonymous', $edit['authorcontact_allow_anonymous']);
+  variable_set('authorcontact_bcc', $edit['authorcontact_bcc']);
+  variable_set('authorcontact_form_width', $edit['authorcontact_form_width']);
+  variable_set('authorcontact_form_height', $edit['authorcontact_form_height']);
+  variable_set('authorcontact_block_display_types', $edit['authorcontact_block_display_types']);
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function authorcontact_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case '0':
+      // Show on nodes but not on edit pages etc.
+      if ($node = menu_get_object() && arg(2) == NULL) {
+        $node = menu_get_object();
+        $author = user_load($node->uid);
+        // Check current user's access.
+        if(!variable_get('authorcontact_allow_anonymous', 1)) {
+		  if (!_contact_personal_tab_access($author)) {
+            return;
+          }
+		}
+
+        // Check if current node type is selected to show block.
+        $allowed_types = variable_get('authorcontact_block_display_types', array());
+        if (empty($allowed_types[$node->type])) {
+          return;
+        }
+
+        $block['subject'] = t('Contact');
+
+        // Hide form and alert user if the message limit is reached.
+        if (!flood_is_allowed('authorcontact', variable_get('contact_hourly_threshold', 5))) {
+          $block['content']['warning'] = array(
+            '#prefix' => '<div class="messages warning"><em>',
+            '#markup' => t(
+              'You cannot send more than %number messages per hour. Please try again later.',
+              array('%number' => variable_get('contact_hourly_threshold', 5))
+            ),
+            '#suffix' => '</em></div>',
+          );
+        }
+        else {
+          $block['content']['description'] = array(
+            '#prefix' => '<div class="authorcontact-desc">',
+            '#markup' => variable_get('authorcontact_desc', ''),
+            '#suffix' => '</div>',
+          );
+          $block['content']['form'] = drupal_get_form('authorcontact_form', $node);
+        }
+      }
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Define the form for the block.
+ */
+function authorcontact_form($form, &$form_state, $node) {
+  global $user;
+  $form = array();
+  $form_state['node'] = $node;
+
+  // For authenticated users, use their user name and email, unless allowed to
+  // use different.
+  if (isset($user->name) && variable_get('authorcontact_allow_different_name', FALSE) == FALSE) {
+    $form['sendername_display'] = array(
+      '#markup' => t('Your name: %name', array('%name' => $user->name)),
+      '#weight' => -2,
+      '#prefix' => '<p>',
+    );
+    $form['sendername'] = array(
+      '#type' => 'value',
+      '#value' => $user->name,
+    );
+    $form['senderemail_display'] = array(
+      '#markup' => t('Email: %email', array('%email' => $user->mail)),
+      '#weight' => -1,
+      '#prefix' => '<br />',
+      '#suffix' => '</p>',
+    );
+    $form['senderemail'] = array(
+      '#type' => 'value',
+      '#value' => $user->mail,
+    );
+  }
+  // For anonymous users, provide textfields.
+  else {
+    $form['sendername'] = array(
+      '#type'     => 'textfield',
+      '#title'    => t('Your Name'),
+      '#default_value' => isset($user->name) ? $user->name : NULL,
+      '#size'     => variable_get('authorcontact_form_width', 15),
+      '#required' => TRUE,
+      '#weight'   => -2,
+    );
+    $form['senderemail'] = array(
+      '#type'     => 'textfield',
+      '#title'    => t('Email'),
+      '#default_value' => isset($user->mail) ? $user->mail : NULL,
+      '#size'     => variable_get('authorcontact_form_width', 15),
+      '#required' => TRUE,
+      '#weight'   => -1,
+    );
+  }
+
+  $form['sendercomment'] = array(
+    '#title' 	=> t('Message'),
+    '#type' 	=> 'textarea',
+    '#rows' 	=> variable_get('authorcontact_form_height', 3),
+    '#cols' 	=> 6,
+    '#required' => TRUE,
+  );
+
+  $form['nodetitle'] = array(
+    '#type'  => 'hidden',
+    '#value' => $node->title,
+  );
+
+  $form['send'] = array(
+    '#type'  => 'submit',
+    '#value' => t('Send'),
+  );
+
+  return $form;
+}
+
+/**
+ * Form validator for authorcontact_form().
+ */
+function authorcontact_form_validate(&$form, &$form_state) {
+
+  // Check whether the email address is valid.
+  if (!valid_email_address($form_state['values']['senderemail'])) {
+    form_set_error('senderemail', t('The e-mail address is not valid.'));
+  }
+
+}
+
+/**
+ * Submit handler for authorcontact_form().
+ */
+function authorcontact_form_submit(&$form, &$form_state) {
+
+  $node = $form_state['node'];
+  $author = user_load($node->uid);
+  $to = $author->mail;
+  $from = '"' . $form_state['values']['sendername'] . '" <' . $form_state['values']['senderemail'] . '>';
+
+  // Create email variables.
+  $sender = new stdClass();
+  $sender->name = $form_state['values']['sendername'];
+  $sender->mail = $form_state['values']['senderemail'];
+  $params = array(
+    'sender' => $sender,
+    'sendercomment' => $form_state['values']['sendercomment'],
+    'nodetitle' => $form_state['values']['nodetitle'],
+    'referrer' => $_SERVER['HTTP_REFERER'],
+  );
+
+  drupal_mail('authorcontact', 'sendcontact', $to, language_default(), $params, $from);
+
+  $bcc = variable_get('authorcontact_bcc', '');
+  if ($bcc != '') {
+    drupal_mail('authorcontact', 'sendcontact_bcc', $bcc, language_default(), $params, $from);
+  }
+
+  // Create a watchdog entry.
+  watchdog(
+    'mail',
+    'Author Contact: %name-to was sent an e-mail from %name-from using the form on %page',
+    array(
+      '%name-to' => $to,
+      '%name-from' => $from,
+      '%page' => $params['referrer'],
+    )
+  );
+
+  // Flood control.
+  flood_register_event('authorcontact');
+
+  // Inform the user we're finished.
+  drupal_set_message(t('Contact sent from @from.', array('@from' => $form_state['values']['senderemail'])));
+
+}
+
+/**
+ * Implements hook_mail().
+ */
+function authorcontact_mail($key, &$message, $params) {
+
+  if ($key == 'sendcontact' || $key == 'sendcontact_bcc') {
+    $language = $message['language'];
+
+    if ($key == 'sendcontact') {
+      $message['subject'] = t('Contact via @site', array('@site' => variable_get('site_name', 'Your website')));
+    }
+    else {
+      $message['subject'] = t('[Bcc] Contact via @site', array('@site' => variable_get('site_name', 'Your website')));
+      $message['body'][]  = t('This is a copy of Author contact message sent from your site:');
+      $message['body'][]  = '==========';
+    }
+    $message['body'][]  = t('You have received an enquiry through @sitename on the page @nodetitle at @referrer.
+
+
+Name: @name
+
+Email: @email
+
+Enquiry:
+@comment',
+      array(
+        '@sitename'  => variable_get('site_name', t('')),
+        '@nodetitle' => $params['nodetitle'],
+        '@referrer'  => $params['referrer'],
+        '@name' 	 => $params['sender']->name,
+        '@email' 	 => $params['sender']->mail,
+        '@comment' 	 => $params['sendercomment'],
+      )
+    );
+  }
+}

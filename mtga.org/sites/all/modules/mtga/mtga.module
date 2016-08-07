@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the MTGA feature.
+ */
+
+include_once 'mtga.features.inc';
